@@ -1,49 +1,487 @@
 
+#define UNSIGNEDLONGRANGE 4294967295
+#define MICROSINSECOND 1000000
+#define NUMBERMOTORS 6
 
 
-#define X_STEP_PIN         54
-#define X_DIR_PIN          55
-#define X_ENABLE_PIN       38
-#define X_MIN_PIN           3
-#define X_MAX_PIN           2
+class Timer{
 
-#define Y_STEP_PIN         60
-#define Y_DIR_PIN          61
-#define Y_ENABLE_PIN       56
-#define Y_MIN_PIN          14
-#define Y_MAX_PIN          15
+private:
 
-#define Z_STEP_PIN         46
-#define Z_DIR_PIN          48
-#define Z_ENABLE_PIN       62
-#define Z_MIN_PIN          18
-#define Z_MAX_PIN          19
+  unsigned long lastMicros;
 
-#define E_STEP_PIN         26
-#define E_DIR_PIN          28
-#define E_ENABLE_PIN       24
 
-#define Q_STEP_PIN         36
-#define Q_DIR_PIN          34
-#define Q_ENABLE_PIN       30
+public:
+  Timer()
+  {
+    lastMicros=micros();
+  }
 
-#define SDPOWER            -1
-#define SDSS               53
+  unsigned long microsSinceLastCall()
+  {
+    unsigned long newMicros=micros();
+
+    unsigned long microDifference;
+
+
+    if(newMicros<lastMicros)//Overflow
+    {
+      microDifference=(UNSIGNEDLONGRANGE-lastMicros)+newMicros;
+    }
+    else
+    {
+      microDifference=newMicros-lastMicros;
+    }
+
+    lastMicros=newMicros;
+
+    return microDifference;
+  }
+};
+
+
+
+
+// Ramp-Shield with Pololu A4988
+//#Slot E  ### Slot D ### Slot C ###
+///# #######Slot B ### Slot A ### 
+
+#define SLOT_C_STEP_PIN         54
+#define SLOT_C_DIR_PIN          55
+#define SLOT_C_ENABLE_PIN       38
+
+
+#define SLOT_D_STEP_PIN         60
+#define SLOT_D_DIR_PIN          61
+#define SLOT_D_ENABLE_PIN       56
+
+#define SLOT_E_STEP_PIN         46
+#define SLOT_E_DIR_PIN          48
+#define SLOT_E_ENABLE_PIN       62
+
+#define SLOT_A_STEP_PIN         26
+#define SLOT_A_DIR_PIN          28
+#define SLOT_A_ENABLE_PIN       24
+
+#define SLOT_B_STEP_PIN         36
+#define SLOT_B_DIR_PIN          34
+#define SLOT_B_ENABLE_PIN       30
+
+#define SLOT_F_STEP_PIN        17
+#define SLOT_F_DIR_PIN          23
+#define SLOT_F_ENABLE_PIN      16
+
+///#define SDPOWER            -1
+//#define SDSS               53
 #define LED_PIN            13
-
 #define FAN_PIN            9
 
-#define PS_ON_PIN          12
-#define KILL_PIN           -1
+//#define PS_ON_PIN          12
+//#define KILL_PIN           -1
 
 #define HEATER_0_PIN       10
 #define HEATER_1_PIN       8
-#define TEMP_0_PIN          13   // ANALOG NUMBERING
-#define TEMP_1_PIN          14   // ANALOG NUMBERING
+//#define TEMP_0_PIN          13   // ANALOG NUMBERING
+//#define TEMP_1_PIN          14   // ANALOG NUMBERING
+
+
+#define NoError 0
+#define Error 1
+#define MotorStepped 2
+#define TimingNotMet 3
+#define StepAlreadySet 4
+
+
+
+struct Pin {
+protected: 
+
+  int pinNumber;
+  boolean pinState;
+
+public :
+  int setHigh()
+  {
+    digitalWrite(pinNumber, HIGH);
+    return NoError;
+  }
+
+  int setLow()
+  {
+    digitalWrite(pinNumber, LOW);
+    return NoError;
+  }
+
+  int set(int setting) //only LOW or HIGH
+  {
+    digitalWrite(pinNumber, setting);
+    pinState=setting;
+  }
+
+  int flip()
+  {
+    if(pinState==HIGH)
+    {
+      digitalWrite(pinNumber, LOW);
+      pinState=LOW;
+    }
+    else
+    {
+      digitalWrite(pinNumber, HIGH);
+      pinState=HIGH; 
+    }
+    return NoError;
+  }
+
+
+
+  Pin(int pinNumber)
+  {
+    this->pinNumber=pinNumber;
+    pinState=LOW;//i assume that default value is LOW but did not backcheck
+    setLow(); //Now its definetly LOW
+  }
+
+};
+
+
+struct StepPin : 
+Pin
+{
+public:
+
+  StepPin(int pinNumber2): 
+  Pin(pinNumber2)
+  {
+
+  }
+
+  int doStep()
+  {
+    return flip();
+  }
+
+};
+
+struct EnablePin : 
+Pin
+{
+public:
+
+  EnablePin(int pinNumber2): 
+  Pin(pinNumber2)
+  {
+    setLow();
+  }
+
+};
+
+struct DirectionPin : 
+Pin
+{
+public:
+
+  static const int CLOCKWISE=HIGH;
+  static const int COUNTERCLOCKWISE=LOW;
+
+
+  DirectionPin(int pinNumber2): 
+  Pin(pinNumber2)
+  {
+    //Pin(pinNumber2);
+  }
+
+  int setClockwise()
+  {
+    return set(CLOCKWISE); 
+  }
+
+  int setCounterClockwise()
+  {
+    return set(COUNTERCLOCKWISE); 
+  }  
+
+  boolean isClockwise()
+  {
+    return pinState==CLOCKWISE; 
+  }
+
+  boolean isCounterClockwise()
+  {
+    return pinState==COUNTERCLOCKWISE; 
+  }
+
+};
+
+
+
+
+struct Pololu 
+{
+private: 
+  StepPin* stepPin;
+  DirectionPin* dirPin;
+  EnablePin* enablePin;
+
+public: 
+
+  int doStep()
+  {
+    return stepPin->doStep();
+  }
+
+  int setDirCW()
+  {
+    return dirPin->setClockwise();
+  }
+
+  int setDirCounterCW()
+  {
+    return dirPin->setCounterClockwise();
+  }
+
+
+  Pololu(StepPin* stepPin,DirectionPin* dirPin,EnablePin* enablePin)
+  {
+    this->stepPin=stepPin;
+    this->dirPin=dirPin;
+    this->enablePin=enablePin;
+  }
+
+};
+
+
+class EndSwitch
+{
+
+public:
+
+  EndSwitch(Pin pin)
+  {
+
+  }
+
+
+};
+
+class Motor {
+
+  /* see above:
+   #define NoError 0
+   #define Error 1
+   #define MotorStepped 2
+   #define TimingNotMet 3
+   #define StepAlreadySet 4
+   */
+private: 
+
+
+  //const int stepsInFullRound = 321;
+
+  //Maximal rotation range of motor 
+
+
+  //long int maxRotationInSteps; 
+  //long int minRotationInSteps;
+
+  //int stepsPerSecond;
+
+  long int desiredRotationInSteps;
+  long int rotationInSteps;
+  Pololu* driver;
+  unsigned long int period; 
+  unsigned long int elapsedTime; 
+
+
+
+public: 
+
+
+  int addSteps(long int steps)
+  {
+    desiredRotationInSteps=steps;
+    return NoError;
+  }
+
+  int setStepsPerSecond(unsigned long int stepsPerSecond)
+  {
+    //this->period=MICROSINSECOND / stepsPerSecond;
+    period=(MICROSINSECOND) / stepsPerSecond;
+    return NoError;
+  }
+
+
+
+
+  long int getRotationInSteps()
+  {
+    return rotationInSteps;
+  }
+
+
+
+  Motor(Pololu* driver)
+  {    
+    this->driver=driver;
+    this->setStepsPerSecond(900);
+    rotationInSteps=0;    
+  }
+
+  int run(unsigned long microSeconds)
+  {
+    elapsedTime+=microSeconds;
+
+
+    if(elapsedTime>2*period)
+    {
+      // DEBUG: return TimingNotMet;
+    }
+
+    if (elapsedTime>period)
+    {
+      if(desiredRotationInSteps!=0)
+      {
+
+        if(desiredRotationInSteps>0)
+        {
+          driver->setDirCounterCW();
+          desiredRotationInSteps-=1;
+        }
+        else 
+        {
+          driver->setDirCW();
+          desiredRotationInSteps+=1;
+        }
+        elapsedTime-=period;
+        driver->doStep();
+        return  MotorStepped;
+      }
+    }
+
+
+    return  NoError;
+
+  }  
+
+};
+
 
 /*
-A simple test code for running a bipolar stepper motor with Pololu A4988 carrier.
-*/
+struct CollisionDetector
+ {
+ 
+ public :
+ 
+ CollisionDetector()
+ {
+ 
+ }
+ 
+ int requestRotation(float rotation)
+ {
+ 
+ 
+ 
+ return NoError;
+ }
+ 
+ 
+ };
+ 
+ */
+
+
+
+
+/*
+struct Axis {
+ private: 
+ int rotationInSteps;
+ double rotationInDeg;
+ 
+ public: 
+ int getRotationInSteps()
+ {
+ return rotationInSteps;
+ }
+ 
+ 
+ 
+ 
+ };
+ 
+ 
+ */
+
+
+
+
+
+class Cobra{
+
+private:
+
+  boolean firstRun;
+  unsigned long lastRunInstantOfTime;//instantOfTime= Zeitpunkt
+  Timer* timer;
+
+  Motor* motor[NUMBERMOTORS];
+
+
+public:
+
+  Cobra()
+  {
+    firstRun=true;
+    timer=new Timer();
+
+    motor[0]=new Motor(new Pololu(new StepPin(SLOT_A_STEP_PIN),new DirectionPin(SLOT_A_DIR_PIN),new EnablePin(SLOT_A_ENABLE_PIN)));
+    motor[1]=new Motor(new Pololu(new StepPin(SLOT_B_STEP_PIN),new DirectionPin(SLOT_B_DIR_PIN),new EnablePin(SLOT_B_ENABLE_PIN)));
+    motor[2]=new Motor(new Pololu(new StepPin(SLOT_C_STEP_PIN),new DirectionPin(SLOT_C_DIR_PIN),new EnablePin(SLOT_C_ENABLE_PIN)));
+    motor[3]=new Motor(new Pololu(new StepPin(SLOT_D_STEP_PIN),new DirectionPin(SLOT_D_DIR_PIN),new EnablePin(SLOT_D_ENABLE_PIN)));
+    motor[4]=new Motor(new Pololu(new StepPin(SLOT_E_STEP_PIN),new DirectionPin(SLOT_E_DIR_PIN),new EnablePin(SLOT_E_ENABLE_PIN)));
+    motor[5]=new Motor(new Pololu(new StepPin(SLOT_F_STEP_PIN),new DirectionPin(SLOT_F_DIR_PIN),new EnablePin(SLOT_F_ENABLE_PIN)));
+  }
+
+  int run(unsigned long runtime)
+  {
+
+
+    if(firstRun)
+    {
+      timer->microsSinceLastCall();  
+      firstRun=false;   
+    }
+
+    unsigned long elapsedTime=timer->microsSinceLastCall();
+
+    for(int i=0;i<NUMBERMOTORS;i++)
+    {
+      motor[i]->run(elapsedTime);
+    }
+
+    return NoError;
+  } 
+
+
+
+  int addSteps(long int a,long int b, long int c, long int d, long int e,long int f)
+  {
+    motor[0]->addSteps(a);
+    motor[1]->addSteps(b);
+    motor[2]->addSteps(c);
+    motor[3]->addSteps(d);
+    motor[4]->addSteps(e);
+    motor[5]->addSteps(f);
+
+    return NoError;
+  }
+
+
+
+
+
+};
 
 // The number of steps in one full motor rotation
 const int stepsInFullRound = 321;
@@ -53,107 +491,87 @@ const int MOTOR_HEAD_LEFT = 3;
 const int MOTOR_FIRST_LIMB= 4;
 const int MOTOR_ROTATE = 5;
 
+
+Cobra* cobra;
+
 // Set pins
 void setup() {
+
   pinMode(FAN_PIN , OUTPUT);
   pinMode(HEATER_0_PIN , OUTPUT);
   pinMode(HEATER_1_PIN , OUTPUT);
   pinMode(LED_PIN  , OUTPUT);
-  
-  pinMode(X_STEP_PIN  , OUTPUT);
-  pinMode(X_DIR_PIN    , OUTPUT);
-  pinMode(X_ENABLE_PIN    , OUTPUT);
-  
-  pinMode(Y_STEP_PIN  , OUTPUT);
-  pinMode(Y_DIR_PIN    , OUTPUT);
-  pinMode(Y_ENABLE_PIN    , OUTPUT);
-  
-  pinMode(Z_STEP_PIN  , OUTPUT);
-  pinMode(Z_DIR_PIN    , OUTPUT);
-  pinMode(Z_ENABLE_PIN    , OUTPUT);
-  
-  pinMode(E_STEP_PIN  , OUTPUT);
-  pinMode(E_DIR_PIN    , OUTPUT);
-  pinMode(E_ENABLE_PIN    , OUTPUT);
-  
-  pinMode(Q_STEP_PIN  , OUTPUT);
-  pinMode(Q_DIR_PIN    , OUTPUT);
-  pinMode(Q_ENABLE_PIN    , OUTPUT);
-  
-   digitalWrite(X_ENABLE_PIN    , LOW);
-   digitalWrite(Y_ENABLE_PIN    , LOW);
-   digitalWrite(Z_ENABLE_PIN    , LOW);
-   digitalWrite(E_ENABLE_PIN    , LOW);
-   digitalWrite(Q_ENABLE_PIN    , LOW);
-/*  pinMode(stepPin, OUTPUT);      
-  pinMode(dirPin, OUTPUT);
-  digitalWrite(stepPin, LOW);
-  digitalWrite(dirPin, LOW);  */
+
+  pinMode(SLOT_C_STEP_PIN  , OUTPUT);
+  pinMode(SLOT_C_DIR_PIN    , OUTPUT);
+  pinMode(SLOT_C_ENABLE_PIN    , OUTPUT);
+
+  pinMode(SLOT_D_STEP_PIN  , OUTPUT);
+  pinMode(SLOT_D_DIR_PIN    , OUTPUT);
+  pinMode(SLOT_D_ENABLE_PIN    , OUTPUT);
+
+  pinMode(SLOT_E_STEP_PIN  , OUTPUT);
+  pinMode(SLOT_E_DIR_PIN    , OUTPUT);
+  pinMode(SLOT_E_ENABLE_PIN    , OUTPUT);
+
+  pinMode(SLOT_A_STEP_PIN  , OUTPUT);
+  pinMode(SLOT_A_DIR_PIN    , OUTPUT);
+  pinMode(SLOT_A_ENABLE_PIN    , OUTPUT);
+
+  pinMode(SLOT_B_STEP_PIN  , OUTPUT);
+  pinMode(SLOT_B_DIR_PIN    , OUTPUT);
+  pinMode(SLOT_B_ENABLE_PIN    , OUTPUT);
+
+  pinMode(SLOT_F_STEP_PIN  , OUTPUT);
+  pinMode(SLOT_F_DIR_PIN    , OUTPUT);
+  pinMode(SLOT_F_ENABLE_PIN    , OUTPUT);
+
+
+  digitalWrite(SLOT_C_ENABLE_PIN    , LOW);
+  digitalWrite(SLOT_D_ENABLE_PIN    , LOW);
+  digitalWrite(SLOT_E_ENABLE_PIN    , LOW);
+  digitalWrite(SLOT_A_ENABLE_PIN    , LOW);
+  digitalWrite(SLOT_B_ENABLE_PIN    , LOW);
+  digitalWrite(SLOT_F_ENABLE_PIN    , LOW);
+
+  cobra=new Cobra();
 }
 
-// Runs the motor according to a chosen direction, speed (rounds per seconds) and the number of steps
-void run(boolean runForward, double speedRPS, int stepCount, int motor_id) {
-  int stepPin = 0;
-  int dirPin = 0;
-  switch (motor_id) {
-     case MOTOR_SECOND_LIMB:
-         stepPin = X_STEP_PIN;
-         dirPin = X_DIR_PIN;
-         break;
-     case MOTOR_HEAD_RIGHT:
-         stepPin = Y_STEP_PIN;
-         dirPin = Y_DIR_PIN;
-         break;
-     case MOTOR_HEAD_LEFT:
-         stepPin = Z_STEP_PIN;
-         dirPin = Z_DIR_PIN;
-         break;
-     case MOTOR_FIRST_LIMB:
-         stepPin = Q_STEP_PIN;
-         dirPin = Q_DIR_PIN;
-         break;
-     case MOTOR_ROTATE:
-         stepPin = E_STEP_PIN;
-         dirPin = E_DIR_PIN;
-         break;
-     default:
-         return;
-  }
-  digitalWrite(dirPin, runForward);
-  for (int i = 0; i < stepCount; i++) {
-    digitalWrite(stepPin, HIGH);
-    holdHalfCylce(speedRPS);
-    digitalWrite(stepPin, LOW);
-    holdHalfCylce(speedRPS);
-  }
-}
 
-// A custom delay function used in the run()-method
-void holdHalfCylce(double speedRPS) {
-  long holdTime_us = (long)(1.0 / (double) stepsInFullRound / speedRPS / 2.0 * 1E6);
-  int overflowCount = holdTime_us / 65535;
-  for (int i = 0; i < overflowCount; i++) {
-    delayMicroseconds(65535);
-  }
-  delayMicroseconds((unsigned int) holdTime_us);
-}
-
-// Runs the motor once in forward direction and once to the opposite direction. 
-// Holds the motor still for 1 sec after both movements. 
-void runBackAndForth(double speedRPS, int rounds, int motor_id) {
-  run(true, speedRPS, stepsInFullRound * rounds, motor_id);
-  delay(1000);
-  run(false, speedRPS, stepsInFullRound * rounds, motor_id);
-  delay(1000);
-}
 
 
 // Tests various speeds for 10 full rotations
 void loop(){
-  //runBackAndForth(10, 10, MOTOR_FIRST_LIMB);
-  runBackAndForth(10, 10, MOTOR_ROTATE);
-//  runBackAndForth(7, 10, MOTOR_X);  
-//  runBackAndForth(10, 10, MOTOR_Y);
+  //runBackAndForth(10, 10, MOTOR_FIRST_LIMB); //Slot B
+  //runBackAndForth(10, 20, MOTOR_ROTATE); // Slot A
+  //  runBackAndForth(7, 20, MOTOR_SECOND_LIMB); //Slot C
+  //runBackAndForth(7, 10, MOTOR_HEAD_RIGHT); //Slot D
+  // runBackAndForth(7, 10, MOTOR_HEAD_LEFT); //Slot E
+
+  /*
+cobra->addSteps(50,0,0,0,0,0);
+   cobra->run(1000000);
+   cobra->addSteps(0,50,0,0,0,0);
+   cobra->run(1000000);
+   */
+  cobra->addSteps(0,0,50,0,0,0);
+  cobra->run(1000000);
+
+  //cobra->addSteps(0,0,0,50,0,0);
+  cobra->run(1000000);
+
+  //cobra->addSteps(0,0,0,0,350,0);
+
+  cobra->run(1000000);
+  //cobra->addSteps(0,0,0,0,0,50);
+  cobra->run(1000000);
+
+
+
+  //  runBackAndForth(7, 10, MOTOR_X); 
+  //  runBackAndForth(10, 10, MOTOR_Y);
 
 }
+
+
 
