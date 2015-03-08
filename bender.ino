@@ -303,6 +303,8 @@ public:
     return NoError;
   }
 
+
+
   int setStepsPerSecond(unsigned long int stepsPerSecond)
   {
     //this->period=MICROSINSECOND / stepsPerSecond;
@@ -319,11 +321,19 @@ public:
   }
 
 
+  int runStepsInTime(long int steps, unsigned long int time)
+  {
+    period=time/abs(steps);
+    addSteps(steps);
+    elapsedTime=0;
+
+  }
+
 
   Motor(Pololu* driver)
   {    
     this->driver=driver;
-    this->setStepsPerSecond(900);
+   // this->setStepsPerSecond(900);
     rotationInSteps=0;    
   }
 
@@ -345,12 +355,14 @@ public:
         if(desiredRotationInSteps>0)
         {
           driver->setDirCounterCW();
-          desiredRotationInSteps-=1;
+          desiredRotationInSteps--;
+          rotationInSteps++;
         }
         else 
         {
           driver->setDirCW();
-          desiredRotationInSteps+=1;
+          desiredRotationInSteps++;
+          rotationInSteps--;
         }
         elapsedTime-=period;
         driver->doStep();
@@ -465,6 +477,8 @@ public:
 
 
 
+
+
   int addSteps(long int a,long int b, long int c, long int d, long int e,long int f)
   {
     motor[0]->addSteps(a);
@@ -477,6 +491,58 @@ public:
     return NoError;
   }
 
+
+
+
+
+  int runStepsInTime(long int a,long int b, long int c, long int d, long int e,long int f,unsigned long timeInMicros)
+  {
+    unsigned long int totalRunTime=0;
+    motor[0]->runStepsInTime(a,timeInMicros);
+    motor[1]->runStepsInTime(b,timeInMicros);
+    motor[2]->runStepsInTime(c,timeInMicros);
+    motor[3]->runStepsInTime(d,timeInMicros);
+    motor[4]->runStepsInTime(e,timeInMicros);
+    motor[5]->runStepsInTime(f,timeInMicros);
+
+   
+
+  
+    unsigned long elapsedTime=timer->microsSinceLastCall();
+
+    while (totalRunTime<timeInMicros)
+    {
+      elapsedTime=timer->microsSinceLastCall();
+      for(int i=0;i<NUMBERMOTORS;i++)
+      {
+        motor[i]->run(elapsedTime);
+      }
+      totalRunTime=totalRunTime+elapsedTime;
+    }
+    return NoError;
+  }
+
+
+
+  int runFast(long int a,long int b, long int c, long int d, long int e,long int f)
+  {
+    int stepperSpeed=50;
+    unsigned long int timeInMicros=max(abs(f),max(abs(e),max(abs(d),max(abs(c),max(abs(a),abs(b))))))*stepperSpeed;
+    runStepsInTime(a,b,c, d,  e, f,timeInMicros);
+  
+    
+       return NoError;
+  }
+
+  int runSlow(long int a,long int b, long int c, long int d, long int e,long int f)
+  {
+    int stepperSpeed=200;
+    unsigned long int timeInMicros=max(abs(f),max(abs(e),max(abs(d),max(abs(c),max(abs(a),abs(b))))))*stepperSpeed;
+    runStepsInTime(a,b,c, d,  e, f,timeInMicros);
+  
+    
+       return NoError;
+  }
 
 
 
@@ -535,6 +601,37 @@ void setup() {
   digitalWrite(SLOT_F_ENABLE_PIN    , LOW);
 
   cobra=new Cobra();
+  
+  /*for(int i=0;i<1000;i++)
+  {
+   cobra->runStepsInTime(0,10,0,0,0,0,1000);
+  }*/
+ 
+
+cobra->runFast(0,25000,0,0,0,0);
+cobra->runSlow(0,-25000,0,0,0,0);
+
+cobra->runFast(0,0,25000,0,0,0);
+cobra->runSlow(0,0,-25000,0,0,0);
+
+cobra->runFast(0,0,0,25000,0,0);
+cobra->runSlow(0,0,0,-25000,0,0);
+
+
+
+/*
+cobra->runFast(10000,10000,10000,10000,1000,10000);
+cobra->runFast(-10000,0,0,0,0,0);
+cobra->runFast(0,-10000,0,0,0,0);
+cobra->runFast(0,0,-10000,0,0,0);
+cobra->runFast(0,0,0,-10000,0,0);
+cobra->runFast(0,0,0,0,-1000,0);
+cobra->runFast(0,0,0,0,0,-10000);
+
+cobra->runSlow(0,0,0,10000,0,0);
+cobra->runSlow(0,0,0,-10000,0,0);
+*/
+
 }
 
 
@@ -542,34 +639,6 @@ void setup() {
 
 // Tests various speeds for 10 full rotations
 void loop(){
-  //runBackAndForth(10, 10, MOTOR_FIRST_LIMB); //Slot B
-  //runBackAndForth(10, 20, MOTOR_ROTATE); // Slot A
-  //  runBackAndForth(7, 20, MOTOR_SECOND_LIMB); //Slot C
-  //runBackAndForth(7, 10, MOTOR_HEAD_RIGHT); //Slot D
-  // runBackAndForth(7, 10, MOTOR_HEAD_LEFT); //Slot E
-
-  /*
-cobra->addSteps(50,0,0,0,0,0);
-   cobra->run(1000000);
-   cobra->addSteps(0,50,0,0,0,0);
-   cobra->run(1000000);
-   */
-  cobra->addSteps(0,0,50,0,0,0);
-  cobra->run(1000000);
-
-  //cobra->addSteps(0,0,0,50,0,0);
-  cobra->run(1000000);
-
-  //cobra->addSteps(0,0,0,0,350,0);
-
-  cobra->run(1000000);
-  //cobra->addSteps(0,0,0,0,0,50);
-  cobra->run(1000000);
-
-
-
-  //  runBackAndForth(7, 10, MOTOR_X); 
-  //  runBackAndForth(10, 10, MOTOR_Y);
 
 }
 
